@@ -117,6 +117,9 @@ function renderResult(r) {
   if (!r.available) {
     badge = '<span class="badge warn">UNAVAILABLE</span>';
     body = '<pre class="stderr">' + esc(r.error) + '</pre>';
+  } else if (r.skipped) {
+    badge = '<span class="badge warn">SKIPPED</span>';
+    body = '<pre style="color:var(--muted)">' + esc(r.message) + '</pre>';
   } else {
     const okState = r.success;
     badge = '<span class="badge ' + (okState?'ok':'err') + '">' +

@@ -138,14 +138,44 @@ app.post('/api/validate', upload.array('files'), async (req, res) => {
     // 3. Full read — actually decode events end to end.
     const readArgs = ['-i', 'ctf', traceDir];
 
-    const [meta, info, read] = await Promise.all([
-      runBt2(metaArgs, 'Metadata validation', `${BT2} ${metaArgs.join(' ')}`),
-      runBt2(infoArgs, 'Trace structure (trace-infos)', `${BT2} ${infoArgs.join(' ')}`),
-      runBt2(readArgs, 'Full trace read', `${BT2} ${readArgs.join(' ')}`),
-    ]);
+    // trace-infos and the full read need actual stream data files, not just
+    // metadata. Detect whether any stream file was uploaded so we can skip
+    // those checks with a clear message instead of a "Trace has no streams"
+    // error when the user only wants to validate the metadata.
+    const hasStreams = fs
+      .readdirSync(traceDir, { withFileTypes: true })
+      .some((e) => e.isFile() && e.name !== 'metadata');
+
+    const skipped = (label, command) => ({
+      label,
+      command,
+      available: true,
+      skipped: true,
+      message:
+        'Skipped: this check decodes event streams, but the upload contains ' +
+        'only a "metadata" file (no stream data files). Metadata validation ' +
+        'above still fully checks the metadata. Upload the whole trace ' +
+        'directory to run this check.',
+    });
+
+    const meta = await runBt2(
+      metaArgs, 'Metadata validation', `${BT2} ${metaArgs.join(' ')}`
+    );
+
+    let info, read;
+    if (hasStreams) {
+      [info, read] = await Promise.all([
+        runBt2(infoArgs, 'Trace structure (trace-infos)', `${BT2} ${infoArgs.join(' ')}`),
+        runBt2(readArgs, 'Full trace read', `${BT2} ${readArgs.join(' ')}`),
+      ]);
+    } else {
+      info = skipped('Trace structure (trace-infos)', `${BT2} ${infoArgs.join(' ')}`);
+      read = skipped('Full trace read', `${BT2} ${readArgs.join(' ')}`);
+    }
 
     res.json({
       traceDirFound: true,
+      metadataOnly: !hasStreams,
       results: [meta, info, read],
     });
   } catch (e) {
