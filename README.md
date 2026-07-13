@@ -1,8 +1,13 @@
 # CTF Trace Validator
 
-A small web app that lets users validate a **CTF 1.8.x** (Common Trace Format)
-trace by uploading it and running the relevant **Babeltrace 2** commands against
-it. The app shows the exact success or error output `babeltrace2` produced.
+A small web app that lets users validate a **CTF** (Common Trace Format) trace —
+both **CTF 1.8** and **CTF 2** — by uploading it and running the relevant
+**Babeltrace 2** commands against it. The app shows the exact success or error
+output `babeltrace2` produced.
+
+CTF 2 support requires Babeltrace **2.1+**; the bundled Docker image compiles
+Babeltrace **2.1.2** from source (Debian's package is only 2.0.x, which reads
+CTF 1.8 but not CTF 2).
 
 ## What it runs
 
