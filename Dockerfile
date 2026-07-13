@@ -20,7 +20,7 @@ RUN curl -fsSL -o bt2.tar.bz2 \
         "https://www.efficios.com/files/babeltrace/babeltrace2-${BT2_VERSION}.tar.bz2" \
     && tar -xjf bt2.tar.bz2 \
     && cd "babeltrace2-${BT2_VERSION}" \
-    && ./configure --prefix=/usr/local --disable-man-pages \
+    && ./configure --prefix=/usr/local --disable-man-pages --disable-debug-info \
     && make -j"$(nproc)" \
     && make install DESTDIR=/opt/bt2
 
