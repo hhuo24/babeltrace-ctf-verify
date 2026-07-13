@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: babeltrace-ctf-verify
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /healthz

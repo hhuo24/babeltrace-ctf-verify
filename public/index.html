@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CTF Trace Validator — Babeltrace 2</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #1a2130; --border: #2a3448; --text: #e6ebf5;
+    --muted: #8b98b0; --accent: #4d9fff; --ok: #35c46b; --err: #ff5c72;
+    --mono: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  .sub code { background: var(--panel); padding: 1px 6px; border-radius: 4px; font-family: var(--mono); }
+  #drop {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 40px 20px;
+    text-align: center; cursor: pointer; transition: .15s; background: var(--panel);
+  }
+  #drop.hover { border-color: var(--accent); background: #1e2739; }
+  #drop strong { color: var(--accent); }
+  #fileList { margin: 14px 0 0; font-family: var(--mono); font-size: .85rem; color: var(--muted); }
+  .row { display: flex; gap: 12px; align-items: center; margin-top: 18px; }
+  button {
+    background: var(--accent); color: #06101f; border: 0; border-radius: 8px;
+    padding: 11px 22px; font-size: 1rem; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .clear { background: transparent; color: var(--muted); font-weight: 400; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    margin-top: 18px; overflow: hidden;
+  }
+  .card h3 {
+    margin: 0; padding: 12px 16px; font-size: .98rem; display: flex;
+    justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);
+  }
+  .badge { font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; letter-spacing: .3px; }
+  .badge.ok { background: rgba(53,196,107,.15); color: var(--ok); }
+  .badge.err { background: rgba(255,92,114,.15); color: var(--err); }
+  .badge.warn { background: rgba(255,193,77,.15); color: #ffc14d; }
+  .cmd { font-family: var(--mono); font-size: .78rem; color: var(--muted); padding: 8px 16px; background: #141a27; border-bottom: 1px solid var(--border); word-break: break-all; }
+  pre {
+    margin: 0; padding: 12px 16px; font-family: var(--mono); font-size: .8rem;
+    white-space: pre-wrap; word-break: break-word; max-height: 340px; overflow: auto;
+  }
+  .stderr { color: #ffb0ba; border-top: 1px solid var(--border); }
+  .label { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .5px; padding: 8px 16px 0; }
+  .note { color: var(--muted); font-size: .82rem; margin-top: 8px; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #06101f; border-radius: 50%; animation: s .7s linear infinite; vertical-align: -2px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CTF Trace Validator</h1>
+  <p class="sub">Upload a CTF&nbsp;1.8.x trace and validate it with <code>babeltrace2</code>. Include the trace's <code>metadata</code> file (and its stream files), or a single <code>.zip</code> of the trace directory.</p>
+
+  <div id="drop">
+    <p style="margin:0 0 6px">Drag &amp; drop trace files here, or <strong>click to browse</strong></p>
+    <p class="note" style="margin:0">Needs a file literally named <code style="font-family:var(--mono)">metadata</code>. Multiple files and folders supported.</p>
+    <input id="file" type="file" multiple webkitdirectory style="display:none" />
+    <input id="fileFlat" type="file" multiple style="display:none" />
+    <div id="fileList"></div>
+  </div>
+
+  <div class="row">
+    <button id="go" disabled>Validate trace</button>
+    <button id="clear" class="clear" style="display:none">Clear</button>
+    <label class="note" style="margin:0 0 0 auto">
+      <input type="checkbox" id="folderMode" /> pick a folder
+    </label>
+  </div>
+
+  <div id="results"></div>
+</div>
+
+<script>
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+const fileFlat = document.getElementById('fileFlat');
+const folderMode = document.getElementById('folderMode');
+const fileListEl = document.getElementById('fileList');
+const goBtn = document.getElementById('go');
+const clearBtn = document.getElementById('clear');
+const resultsEl = document.getElementById('results');
+let files = [];
+
+function activeInput() { return folderMode.checked ? fileInput : fileFlat; }
+function render() {
+  if (!files.length) { fileListEl.textContent = ''; goBtn.disabled = true; clearBtn.style.display = 'none'; return; }
+  fileListEl.innerHTML = files.map(f => '• ' + (f.webkitRelativePath || f.name) + ' <span style="opacity:.6">(' + f.size + ' B)</span>').join('<br>');
+  goBtn.disabled = false; clearBtn.style.display = '';
+}
+function setFiles(list) { files = Array.from(list); render(); }
+
+drop.addEventListener('click', () => activeInput().click());
+fileInput.addEventListener('change', e => setFiles(e.target.files));
+fileFlat.addEventListener('change', e => setFiles(e.target.files));
+clearBtn.addEventListener('click', () => { files = []; fileInput.value = fileFlat.value = ''; resultsEl.innerHTML = ''; render(); });
+
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hover'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); if (ev==='drop'||e.target===drop) drop.classList.remove('hover'); }));
+drop.addEventListener('drop', e => { if (e.dataTransfer.files.length) setFiles(e.dataTransfer.files); });
+
+function esc(s){ return (s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function renderResult(r) {
+  let badge, body = '';
+  if (!r.available) {
+    badge = '<span class="badge warn">UNAVAILABLE</span>';
+    body = '<pre class="stderr">' + esc(r.error) + '</pre>';
+  } else {
+    const okState = r.success;
+    badge = '<span class="badge ' + (okState?'ok':'err') + '">' +
+      (okState ? 'SUCCESS' : 'FAILED (exit ' + r.exitCode + ')') + (r.timedOut?' — TIMED OUT':'') + '</span>';
+    if (r.stdout) body += '<div class="label">stdout</div><pre>' + esc(r.stdout) + '</pre>';
+    if (r.stderr) body += '<div class="label">stderr</div><pre class="stderr">' + esc(r.stderr) + '</pre>';
+    if (!r.stdout && !r.stderr) body += '<pre style="color:var(--muted)">(no output)</pre>';
+  }
+  return '<div class="card"><h3><span>' + esc(r.label) + '</span>' + badge + '</h3>' +
+    '<div class="cmd">$ ' + esc(r.command) + '</div>' + body + '</div>';
+}
+
+goBtn.addEventListener('click', async () => {
+  goBtn.disabled = true; goBtn.innerHTML = '<span class="spin"></span> Running…';
+  resultsEl.innerHTML = '';
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f, f.name));
+  try {
+    const res = await fetch('/api/validate', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) { resultsEl.innerHTML = '<div class="card"><pre class="stderr">' + esc(data.error) + '</pre></div>'; }
+    else if (data.traceDirFound === false) { resultsEl.innerHTML = '<div class="card"><h3><span>No trace found</span><span class="badge warn">SKIPPED</span></h3><pre class="stderr">' + esc(data.message) + '</pre></div>'; }
+    else { resultsEl.innerHTML = data.results.map(renderResult).join(''); }
+  } catch (err) {
+    resultsEl.innerHTML = '<div class="card"><pre class="stderr">Request failed: ' + esc(String(err)) + '</pre></div>';
+  } finally {
+    goBtn.disabled = false; goBtn.textContent = 'Validate trace';
+  }
+});
+</script>
+</body>
+</html>
